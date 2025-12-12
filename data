@@ -1,0 +1,16 @@
+from polygon import RESTClient
+
+client = RESTClient("ZjGdB49wToR6siRiALrzTBs6h4uQGVyZ")
+
+tickers = []
+for t in client.list_tickers(
+	ticker="EURUSD",
+	market="fx",
+	active="true",
+	order="asc",
+	limit="100",
+	sort="ticker",
+	):
+    tickers.append(t)
+
+print(tickers)
