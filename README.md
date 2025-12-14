@@ -1,114 +1,87 @@
-# Deep Learning Class (VITMMA19) – Bull-Flag Detector
+# BULL FLAG DETECTOR PROJECT
 
-This repository implements a full deep-learning pipeline for **bull/bear flag detection** on labeled OHLC time series:
-- data preprocessing (segment dataset creation),
-- model training,
-- evaluation,
-- inference demo,
-all runnable inside a Docker container.
 
----
+## Project Details
 
-## Project Information
+### Project Information
 
 - **Selected Topic**: Bull-flag detector
-- **Student Name**: _[Fill in]_
-- **Aiming for +1 Mark**: _[Yes/No]_
+- **Student Name**: Mészáros Bori Anna
+- **Aiming for +1 Mark**: No
 
----
+### Solution Description
 
-## Solution Description
+This project tackles the automation of technical analysis in financial markets by detecting bullish vs. bearish flag-type formations in OHLC time series. Since manual pattern spotting is subjective, slow, and hard to scale across many instruments, we framed the task as a supervised classification problem: given a fixed-length price segment, the model predicts the corresponding pattern class.
 
-### Problem
-Given OHLC time series and labeled time intervals (bull/bear flags), the goal is to learn a classifier that predicts the label of an extracted segment.
+To approach this, we built a hybrid deep learning classifier that combines 1D Convolutional Neural Networks (CNNs) with Transformer encoders. The CNN layers focus on learning local geometric cues (e.g., abrupt “pole”-like moves and consolidation structure), while the Transformer’s multi-head attention captures longer-range temporal dependencies across the segment. For reference, we also implemented a baseline LSTM.
 
-### Data representation
-Each labeled interval is converted into a **fixed-length** multivariate sequence. The dataset builder:
-- extracts the interval from the matching OHLC CSV,
-- optionally includes a “pole” lookback window,
-- enforces a minimum segment length,
-- deduplicates overlapping samples,
-- pads/truncates to a fixed sequence length.
+A key limitation of the project is label quality: the annotations were not produced by domain experts, so the ground truth is inherently noisy and sometimes inconsistent. As a result, model performance is strongly influenced by the classic GIGO effect (“garbage in, garbage out”)—even a well-designed architecture cannot reliably learn sharp decision boundaries if the training labels do not accurately represent the underlying patterns.
 
-### Models
-Two model types are supported:
-- **`baseline`**: LSTM classifier (reference model)
-- **`main`**: CNN feature extractor + TransformerEncoder + classification head
+#### Data Preparation
+Pipeline summary:
+- Data is acquired either by mounting the dataset to /app/data or by automatically downloading bullflagdetector.zip from SharePoint if missing.
+- Preprocessing converts raw OHLC CSVs and JSON annotation spans into a training-ready dataset consisting of:
+  - output/dataset/index.csv (metadata + label per sample)
+  - output/dataset/segments/*.csv (cut segments with target label)
+- Two models are trained:
+  - Baseline model (reference)
+  - Main model (stronger architecture)
+- Training uses:
+  - stratified train/validation/test split by label (target)
+  - class-weighted CrossEntropyLoss to reduce majority-class collapse
+- Evaluation runs on the test set and produces:
+  - metrics JSON files (accuracy, macro F1, per-class metrics)
+  - confusion matrix images
+- Inference demo produces CSV outputs with example predictions.
 
-### Training
-- train/val/test split (configurable fractions)
-- optional class balancing via sampling
-- model checkpoint saved to `output/models/`
+All artifacts (dataset, models, metrics, figures, intermediate extraction) are written under output/ (mounted to /app/output in Docker).
 
-### Evaluation
-Evaluation is performed on the test split and includes:
-- **accuracy**
-- **macro F1**
-- **confusion matrix** (saved as an image when enabled)
+### Docker Instructions
 
----
+This project is containerized using Docker. Follow the instructions below to build and run the solution.
 
-## Data Preparation
+#### Build
 
-### Expected input location
-Mount your local `./data` folder into the container at `/app/data`.
+Run the following command in the root directory of the repository to build the Docker image:
 
-The preprocessing step searches for label JSON(s) and OHLC CSV(s) in one of these formats:
-1) **ZIP mode (default)**: `/app/data/bullflagdetector.zip`
-2) **Folder mode**: recursive search under `/app/data`
-
-### OHLC CSV requirements
-Each OHLC CSV must contain (case-insensitive):
-- `timestamp`, `open`, `high`, `low`, `close`
-
-Supported `timestamp` formats:
-- 13-digit epoch milliseconds
-- `YYYY-MM-DD HH:MM`
-- `YYYY-MM-DD HH:MM:SS`
-
-### Label JSON requirements (high-level)
-The preprocessing expects labeled time intervals containing:
-- `start` timestamp
-- `end` timestamp
-- a label that can be mapped to **BULL** or **BEAR** (case-insensitive match)
-
-Each labeled interval must be matchable to a source OHLC CSV and must fall within its available time range.
-
----
-
-## Logging Requirements (for submission)
-
-When running the container, **all stdout/stderr** should be captured into:
-
-- `log/run.log`
-
-The pipeline logs include:
-- configuration snapshot (hyperparameters, feature flags),
-- confirmation of data loading and dataset sizes,
-- model type and parameter counts,
-- final quick test metrics after training,
-- test evaluation metrics (**accuracy**, **macro F1**) and confusion matrix path,
-- inference demo output path.
-
-> Ensure the `log/` directory exists on the host before running.
-
----
-
-## Docker Instructions
-
-This project is containerized using Docker.
-
-### Build
-Run in the repository root:
 ```bash
 docker build --progress=plain -t bullflag-pipeline .
+```
 
-### Run
-Run in the repository root:
+#### Run
+
+To run the solution, use the following command. You must mount your local data directory to `/app/data` inside the container.
+
+**To capture the logs for submission (required), redirect the output to a file:**
+
 ```bash
-docker run --rm \
-  -v "$(pwd -W)/data:/app/data" \
-  -v "$(pwd -W)/output:/app/output" \
-  bullflag-pipeline 2>&1 | tee log/run.log
+docker run --rm -v "$(pwd -W)/data:/app/data" -v "$(pwd -W)/output:/app/output" bullflag-pipeline 2>&1 | tee log/run.log
+```
+
+### File Structure and Functions
+
+The repository is structured as follows:
+
+- **`src/`**: Contains the source code for the machine learning pipeline.
+    - `01-data-preprocessing.py`: Scripts for downloading, loading, cleaning, and preprocessing the raw data.
+    - `02-training.py`: The main script for defining the model and executing the training loop.
+    - `03-evaluation.py`: Scripts for evaluating the trained model on test data and generating metrics.
+    - `04-inference.py`: Script for running the model on new, unseen data to generate predictions.
+    - `config.py`: Configuration file containing hyperparameters (e.g., epochs) and paths.
+    - `utils.py`: Helper functions and utilities used across different scripts.
+    - `dataset.py`: Helper function.
+    - `models.py`: Helper function.
+    -  `__innit__.py`: Helper function.
+
+- **`notebook/`**: Contains Jupyter notebooks for analysis and experimentation.
+    - `versions': Experimenting, sanity checking.
+
+- **`log/`**: Contains log files.
+    - `run.log`: Example log file showing the output of a successful training run.
+
+- **Root Directory**:
+    - `Dockerfile`: Configuration file for building the Docker image with the necessary environment and dependencies.
+    - `requirements.txt`: List of Python dependencies required for the project.
+    - `README.md`: Project documentation and instructions.
 
 
